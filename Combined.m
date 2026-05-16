@@ -1,70 +1,131 @@
 % ================PART I=================
-%% Comparison of OOK, PRK, and BFSK Modulation Schemes
-%  BER vs SNR performance (simulation only)
+%% =========================================================
+% Comparison of OOK, PRK, and BFSK Modulation Schemes
+% Manual Simulation + MATLAB Built-in Functions
+%% =========================================================
 clear; clc; close all;
 
-%% ---------- Simulation Parameters ----------
-N         = 1e6;             % bits per SNR value
-SNR_dB    = 0:3:60;          % SNR range in dB
-SNR_lin   = 10.^(SNR_dB/10); % SNR (linear)
+%% Parameters
+N = 1e5;
+SNR_dB = 0:3:30;
+SNR_lin = 10.^(SNR_dB/10);
 
-BER_OOK  = [];
-BER_PRK  = [];
-BER_BFSK = [];
+BER_OOK = zeros(size(SNR_dB));
+BER_PRK = zeros(size(SNR_dB));
+BER_BFSK = zeros(size(SNR_dB));
 
-%% ---------- Random Binary Data ----------
-bits = randi([0 1], 1, N);   % same bits used for all schemes (fair comparison)
+BER_OOK_builtin = zeros(size(SNR_dB));
+BER_PRK_builtin = zeros(size(SNR_dB));
+BER_BFSK_builtin = zeros(size(SNR_dB));
 
-%% ---------- Loop over SNR ----------
+bits = randi([0 1],1,N);
+
+%% Theoretical BER
+BER_OOK_th = 0.5 * erfc(sqrt(SNR_lin/4));
+BER_PRK_th = 0.5 * erfc(sqrt(SNR_lin));
+BER_BFSK_th = 0.5 * erfc(sqrt(SNR_lin/2));
+
+%% FSK Parameters
+freqsep = 1;
+nsamp = 8;
+
+%% =========================================================
+% SNR Loop
+%% =========================================================
 for k = 1:length(SNR_dB)
     SNR = SNR_lin(k);
-
-    % ===== OOK : 0 -> 0, 1 -> 1 =====
-    s_OOK   = bits;
-    Ps_OOK  = mean(abs(s_OOK).^2);     % signal power = 0.5
-    Pn_OOK  = Ps_OOK / SNR;            % noise power from SNR definition
-    sigma   = sqrt(Pn_OOK);            % real AWGN std
-    noise   = sigma * randn(1, N);
-    r_OOK   = s_OOK + noise;
-    det_OOK = r_OOK > 0.5;             % optimum threshold = 0.5
-    BER_OOK = [BER_OOK sum(det_OOK ~= bits)/N];
-
-    % ===== PRK : 0 -> -1, 1 -> +1 =====
-    s_PRK   = 2*bits - 1;
-    Ps_PRK  = mean(abs(s_PRK).^2);     % signal power = 1
-    Pn_PRK  = Ps_PRK / SNR;
-    sigma   = sqrt(Pn_PRK);
-    noise   = sigma * randn(1, N);
-    r_PRK   = s_PRK + noise;
-    det_PRK = r_PRK > 0;               % threshold = 0
-    BER_PRK = [BER_PRK sum(det_PRK ~= bits)/N];
-
-    % ===== BFSK : 0 -> 1 (in-phase), 1 -> j (quadrature) =====
-    s_BFSK = zeros(1, N);
-    s_BFSK(bits == 0) = 1;
-    s_BFSK(bits == 1) = 1i;
-    Ps_BFSK = mean(abs(s_BFSK).^2);    % signal power = 1
-    Pn_BFSK = Ps_BFSK / SNR;
-    sigma   = sqrt(Pn_BFSK/2);         % per-dimension std (complex noise)
-    noise   = sigma * (randn(1, N) + 1i*randn(1, N));
-    r_BFSK  = s_BFSK + noise;
-    det_BFSK = imag(r_BFSK) > real(r_BFSK);   % decide closer orthogonal axis
-    BER_BFSK = [BER_BFSK sum(det_BFSK ~= bits)/N];
+    
+    %% Manual OOK
+    s_OOK = double(bits);
+    Ps_OOK = mean(abs(s_OOK).^2);
+    noise = sqrt(Ps_OOK/SNR) * randn(1,N);
+    r_OOK = s_OOK + noise;
+    det_OOK = r_OOK > 0.5;
+    BER_OOK(k) = sum(det_OOK ~= bits)/N;
+    
+    %% Manual PRK
+    s_PRK = 2*bits - 1;
+    Ps_PRK = mean(abs(s_PRK).^2);
+    noise = sqrt(Ps_PRK/SNR) * randn(1,N);
+    r_PRK = s_PRK + noise;
+    det_PRK = r_PRK > 0;
+    BER_PRK(k) = sum(det_PRK ~= bits)/N;
+    
+    %% Manual BFSK
+    s_BFSK = complex(double(bits==0), double(bits==1));
+    Ps_BFSK = mean(abs(s_BFSK).^2);
+    sigma = sqrt(Ps_BFSK/(2*SNR));
+    noise = sigma * (randn(1,N) + 1i*randn(1,N));
+    r_BFSK = s_BFSK + noise;
+    det_BFSK = imag(r_BFSK) > real(r_BFSK);
+    BER_BFSK(k) = sum(det_BFSK ~= bits)/N;
+    
+    %% Built-in OOK
+    tx_OOK = pammod(bits,2);
+    tx_OOK = (tx_OOK + 1)/2;
+    Ps = mean(abs(tx_OOK).^2);
+    noise = sqrt(Ps/SNR) * randn(1,N);
+    rx_OOK = tx_OOK + noise;
+    det_OOK_builtin = rx_OOK > 0.5;
+    BER_OOK_builtin(k) = sum(det_OOK_builtin ~= bits)/N;
+    
+    %% Built-in PRK
+    tx_PRK = pskmod(bits,2);
+    Ps = mean(abs(tx_PRK).^2);
+    noise = sqrt(Ps/SNR) * randn(1,N);
+    rx_PRK = tx_PRK + noise;
+    det_PRK_builtin = pskdemod(rx_PRK,2);
+    BER_PRK_builtin(k) = sum(det_PRK_builtin ~= bits)/N;
+    
+    %% Built-in BFSK (Fixed)
+    M = 2;
+    tx_BFSK = fskmod(bits,M,freqsep,nsamp,nsamp);
+    Ps = mean(abs(tx_BFSK).^2);
+    SNR_sample = SNR/nsamp;
+    sigma = sqrt(Ps / (2 * SNR_sample));
+    noise = sigma * (randn(size(tx_BFSK)) + 1i*randn(size(tx_BFSK)));
+    rx_BFSK = tx_BFSK + noise;
+    det_BFSK_builtin = fskdemod(rx_BFSK,M,freqsep,nsamp,nsamp);
+    BER_BFSK_builtin(k) = sum(det_BFSK_builtin ~= bits)/N;
 end
 
-%% ---------- Plot ----------
-figure('Color','w');
-semilogy(SNR_dB, BER_OOK,  'ro-', 'LineWidth', 1.6, 'MarkerSize', 7); hold on;
-semilogy(SNR_dB, BER_PRK,  'bs-', 'LineWidth', 1.6, 'MarkerSize', 7);
-semilogy(SNR_dB, BER_BFSK, 'g^-', 'LineWidth', 1.6, 'MarkerSize', 7);
-
-grid on; box on;
+%% =========================================================
+% Figure 1 — Manual Simulation
+%% =========================================================
+figure('Name','Manual Simulation','NumberTitle','off');
+semilogy(SNR_dB,BER_OOK,'ro-','LineWidth',1.8,'MarkerSize',6);
+hold on;
+semilogy(SNR_dB,BER_PRK,'bs-','LineWidth',1.8,'MarkerSize',6);
+semilogy(SNR_dB,BER_BFSK,'g^-','LineWidth',1.8,'MarkerSize',6);
+semilogy(SNR_dB,BER_OOK_th,'r--','LineWidth',1.2);
+semilogy(SNR_dB,BER_PRK_th,'b--','LineWidth',1.2);
+semilogy(SNR_dB,BER_BFSK_th,'g--','LineWidth',1.2);
+grid on;
 xlabel('SNR (dB)');
 ylabel('Bit Error Rate (BER)');
-title('BER vs SNR for OOK, PRK, and BFSK');
-legend({'OOK','PRK','BFSK'}, 'Location','southwest');
-ylim([1e-7 1]);
-xlim([SNR_dB(1) SNR_dB(end)]);
+title('BER vs SNR — Manual Simulation');
+legend('OOK sim','PRK sim','BFSK sim','OOK theory','PRK theory','BFSK theory','Location','southwest');
+ylim([1e-6 1]);
+xlim([0 30]);
+
+%% =========================================================
+% Figure 2 — MATLAB Built-in Functions
+%% =========================================================
+figure('Name','Built-in Functions','NumberTitle','off');
+semilogy(SNR_dB,BER_OOK_builtin,'ro-','LineWidth',1.8,'MarkerSize',6);
+hold on;
+semilogy(SNR_dB,BER_PRK_builtin,'bs-','LineWidth',1.8,'MarkerSize',6);
+semilogy(SNR_dB,BER_BFSK_builtin,'g^-','LineWidth',1.8,'MarkerSize',6);
+semilogy(SNR_dB,BER_OOK_th,'r--','LineWidth',1.2);
+semilogy(SNR_dB,BER_PRK_th,'b--','LineWidth',1.2);
+semilogy(SNR_dB,BER_BFSK_th,'g--','LineWidth',1.2);
+grid on;
+xlabel('SNR (dB)');
+ylabel('Bit Error Rate (BER)');
+title('BER vs SNR — MATLAB Built-in Functions vs Theory');
+legend('OOK built-in','PRK built-in','BFSK built-in','OOK theory','PRK theory','BFSK theory','Location','southwest');
+ylim([1e-6 1]);
+xlim([0 30]);
 
 % ================PART II=================
 % Constants
@@ -296,3 +357,229 @@ xlabel('SNR (dB)');
 ylabel('Bit Error Rate (BER)');
 title('BER vs SNR -- 2, 4, 8 ASK Modulation');
 legend('8ASK', '4ASK', 'BASK (2ASK)');
+
+% ================ PART III =================
+%% Compare the Performance of BPSK, QPSK, 4-QAM, and 4-ASK
+%  Noise added in signal-space domain using proper Eb/N0 normalization
+
+clear; clc; close all;
+
+%% ---------- Simulation Parameters ----------
+N   = 1e6;          % number of bits
+snr = 0:3:60;       % Eb/N0 range in dB
+
+Rb  = 1000;         % bit rate
+Tb  = 1/Rb;         % bit period
+
+%% ---------- Common Bit Energy ----------
+Eb = Tb/2;
+
+%% ---------- Common Amplitude ----------
+% Choose amplitude so BPSK symbol energy = Eb
+A = sqrt(Eb);
+
+%% ==========================================================
+%% BPSK
+%% Constellation: {-A, +A}
+%% ==========================================================
+fprintf('Simulating BPSK...\n');
+
+bits_BPSK = randi([0 1], 1, N);
+
+% Mapping
+tx_BPSK = (2*bits_BPSK - 1) * A;
+
+BER_BPSK = zeros(size(snr));
+
+for i = 1:length(snr)
+
+    SNR_lin = 10^(snr(i)/10);
+
+    % AWGN std
+    sigma = sqrt(Eb/(2*SNR_lin));
+
+    % Channel
+    rx = tx_BPSK + sigma*randn(1,N);
+
+    % Detection
+    rx_bits = rx >= 0;
+
+    % BER
+    BER_BPSK(i) = sum(bits_BPSK ~= rx_bits)/N;
+end
+
+%% ==========================================================
+%% QPSK (Gray coded)
+%% Constellation: (±A, ±A)
+%% ==========================================================
+fprintf('Simulating QPSK...\n');
+
+bits_QPSK = randi([0 1], 1, N);
+
+num_sym_QPSK = N/2;
+
+bits_pairs = reshape(bits_QPSK,2,num_sym_QPSK);
+
+% Gray-coded mapping
+I_QPSK =  (2*bits_pairs(1,:) - 1) * A;
+Q_QPSK = -(2*bits_pairs(2,:) - 1) * A;
+
+BER_QPSK = zeros(size(snr));
+
+for i = 1:length(snr)
+
+    SNR_lin = 10^(snr(i)/10);
+
+    sigma = sqrt(Eb/(2*SNR_lin));
+
+    % AWGN channel
+    I_rx = I_QPSK + sigma*randn(1,num_sym_QPSK);
+    Q_rx = Q_QPSK + sigma*randn(1,num_sym_QPSK);
+
+    % Detection
+    rx_b1 = I_rx >= 0;
+    rx_b2 = Q_rx <= 0;
+
+    rx_bits = reshape([rx_b1; rx_b2],1,[]);
+
+    % BER
+    BER_QPSK(i) = sum(bits_QPSK ~= rx_bits)/N;
+end
+
+%% ==========================================================
+%% 4-QAM
+%% Standard rectangular 4-QAM
+%% ==========================================================
+fprintf('Simulating 4-QAM...\n');
+
+bits_4QAM = randi([0 1],1,N);
+
+num_sym_4QAM = N/2;
+
+bits_pairs4 = reshape(bits_4QAM,2,num_sym_4QAM);
+
+I_4QAM = (2*bits_pairs4(1,:) - 1) * A;
+Q_4QAM = (2*bits_pairs4(2,:) - 1) * A;
+
+BER_4QAM = zeros(size(snr));
+
+for i = 1:length(snr)
+
+    SNR_lin = 10^(snr(i)/10);
+
+    sigma = sqrt(Eb/(2*SNR_lin));
+
+    % AWGN channel
+    I_rx4 = I_4QAM + sigma*randn(1,num_sym_4QAM);
+    Q_rx4 = Q_4QAM + sigma*randn(1,num_sym_4QAM);
+
+    % Detection
+    rx_b1 = I_rx4 >= 0;
+    rx_b2 = Q_rx4 >= 0;
+
+    rx_bits4 = reshape([rx_b1; rx_b2],1,[]);
+
+    % BER
+    BER_4QAM(i) = sum(bits_4QAM ~= rx_bits4)/N;
+end
+
+%% ==========================================================
+%% 4-ASK (Gray coded)
+%% Levels: {-3A, -A, +A, +3A}
+%%
+%% Mapping:
+%% 00 -> -3A
+%% 01 -> -A
+%% 11 -> +A
+%% 10 -> +3A
+%% ==========================================================
+fprintf('Simulating 4-ASK...\n');
+
+bits_4ASK = randi([0 1],1,N);
+
+num_sym_4ASK = N/2;
+
+bits_pairs_4ASK = reshape(bits_4ASK,2,num_sym_4ASK);
+
+sym_idx = bits_pairs_4ASK(1,:)*2 + bits_pairs_4ASK(2,:);
+
+tx_4ASK = zeros(1,num_sym_4ASK);
+
+tx_4ASK(sym_idx == 0) = -3*A;   % 00
+tx_4ASK(sym_idx == 1) = -1*A;   % 01
+tx_4ASK(sym_idx == 3) = +1*A;   % 11
+tx_4ASK(sym_idx == 2) = +3*A;   % 10
+
+% Symbol energy
+Es_4ASK = mean(tx_4ASK.^2);
+
+% Bit energy
+Eb_4ASK = Es_4ASK / 2;
+
+BER_4ASK = zeros(size(snr));
+
+for i = 1:length(snr)
+
+    SNR_lin = 10^(snr(i)/10);
+
+    sigma = sqrt(Eb_4ASK/(2*SNR_lin));
+
+    % AWGN channel
+    rx_4ASK = tx_4ASK + sigma*randn(1,num_sym_4ASK);
+
+    rx_bits_4ASK = zeros(2,num_sym_4ASK);
+
+    % Decision regions
+    idx = rx_4ASK > 2*A;
+    rx_bits_4ASK(:,idx) = repmat([1;0],1,sum(idx));
+
+    idx = (rx_4ASK > 0) & (rx_4ASK <= 2*A);
+    rx_bits_4ASK(:,idx) = repmat([1;1],1,sum(idx));
+
+    idx = (rx_4ASK <= 0) & (rx_4ASK > -2*A);
+    rx_bits_4ASK(:,idx) = repmat([0;1],1,sum(idx));
+
+    idx = rx_4ASK <= -2*A;
+    rx_bits_4ASK(:,idx) = repmat([0;0],1,sum(idx));
+
+    rx_bits4ASK = reshape(rx_bits_4ASK,1,[]);
+
+    % BER
+    BER_4ASK(i) = sum(bits_4ASK ~= rx_bits4ASK)/N;
+end
+
+%% ==========================================================
+%% Plot Results
+%% ==========================================================
+figure('Color','w');
+
+semilogy(snr, BER_BPSK, 'b-o', ...
+    'LineWidth',2,'MarkerSize',6);
+hold on;
+
+semilogy(snr, BER_QPSK, 'r-s', ...
+    'LineWidth',2,'MarkerSize',6);
+
+semilogy(snr, BER_4QAM, 'm-^', ...
+    'LineWidth',2,'MarkerSize',6);
+
+semilogy(snr, BER_4ASK, 'k--d', ...
+    'LineWidth',2,'MarkerSize',6);
+
+grid on;
+
+xlabel('E_b/N_0 (dB)');
+ylabel('Bit Error Rate (BER)');
+
+title('BER vs E_b/N_0 for BPSK, QPSK, 4-QAM, and 4-ASK');
+
+legend('BPSK', ...
+       'QPSK', ...
+       '4-QAM', ...
+       '4-ASK', ...
+       'Location','southwest');
+
+xlim([snr(1) snr(end)]);
+ylim([1e-7 1]);
+
+fprintf('Done!\n');
